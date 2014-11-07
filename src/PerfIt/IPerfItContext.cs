@@ -12,6 +12,7 @@ namespace PerfIt
         
          PerfItFilterAttribute Filter { get; set; }
          Dictionary<string, object> Data { get;  }
-         ConcurrentBag<string> CountersToRun { get;  } 
+         ConcurrentBag<string> CountersToRun { get;  }
+          string InstanceNameSuffix { get; set; }
     }
 }

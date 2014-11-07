@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Collections.Concurrent;
 using System.Diagnostics;
 using System.Net.Http;
 
@@ -7,15 +8,16 @@ namespace PerfIt.Handlers
     public class TotalCountHandler : CounterHandlerBase
     {
 
-        private Lazy<PerformanceCounter> _counter;
+        protected ConcurrentDictionary<string, Lazy<PerformanceCounter>> _counters;
 
         public TotalCountHandler
             (
             string categoryName,
             string instanceName)
             : base(categoryName, instanceName)
-        {           
-            BuildCounters();
+        {
+            _counters = new ConcurrentDictionary<string, Lazy<PerformanceCounter>>();
+            
         }
 
         public override string CounterType
@@ -30,25 +32,39 @@ namespace PerfIt.Handlers
 
         protected override void DoOnRequestEnding(IPerfItContext context)
         {
-            _counter.Value.Increment();
+            //ensure instance counters exist
+            BuildCounters(context.InstanceNameSuffix);
+
+            var currentInstanceName = PerfItRuntime.GetCounterInstanceNameWithSuffix(GetInstanceName(), context.InstanceNameSuffix);
+
+            _counters[currentInstanceName].Value.Increment();
         }
 
-        protected override void BuildCounters(bool newInstanceName = false)
+        protected override void BuildCounters(string instanceNameSuffix,bool newInstanceName = false)
         {
-            _counter = new Lazy<PerformanceCounter>(() =>
+
+            var currentInstanceName = PerfItRuntime.GetCounterInstanceNameWithSuffix(GetInstanceName(), instanceNameSuffix);
+            if (!_counters.Keys.Contains(currentInstanceName))
             {
-                var counter = new PerformanceCounter()
+                var _counter = new Lazy<PerformanceCounter>(() =>
                 {
-                    CategoryName = _categoryName,
-                    CounterName = Name,
-                    InstanceName = GetInstanceName(newInstanceName),
-                    ReadOnly = false,
-                    InstanceLifetime = PerformanceCounterInstanceLifetime.Process
-                };
-                counter.RawValue = 0;
-                return counter;
+                    var counter = new PerformanceCounter()
+                    {
+                        CategoryName = _categoryName,
+                        CounterName = Name,
+                        InstanceName = currentInstanceName,
+                        ReadOnly = false,
+                        InstanceLifetime = PerformanceCounterInstanceLifetime.Process
+                    };
+                    counter.RawValue = 0;
+                    return counter;
+                });
+
+
+                _counters.AddOrUpdate(currentInstanceName,
+                    _counter,
+                    (key, existingCounter) => existingCounter);
             }
-          );
         }
 
         protected override CounterCreationData[] DoGetCreationData()
@@ -67,11 +83,15 @@ namespace PerfIt.Handlers
         public override void Dispose()
         {
             base.Dispose();
-            if (_counter != null && _counter.IsValueCreated)
+            foreach (var counter in _counters.Values)
             {
-                _counter.Value.RemoveInstance();
-                _counter.Value.Dispose(); 
+                if (counter != null && counter.IsValueCreated)
+                {
+                    counter.Value.RemoveInstance();
+                    counter.Value.Dispose();
+                }
             }
+            
         }
 
         

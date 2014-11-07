@@ -11,6 +11,7 @@ namespace PerfIt.Handlers
     {
 
         protected string _instanceName;
+        
         protected string _categoryName;
         protected string _uniqueName;
 
@@ -20,6 +21,7 @@ namespace PerfIt.Handlers
         {
             _categoryName = categoryName;
             _instanceName = instanceName;
+            
             Name = CounterType;
 
             _uniqueName = PerfItRuntime.GetUniqueName(instanceName, Name);
@@ -41,7 +43,7 @@ namespace PerfIt.Handlers
         /// 
         /// </summary>
         /// <param name="newInstanceName"></param>
-        protected abstract void BuildCounters(bool newInstanceName = false);
+        protected abstract void BuildCounters(string instanceNameSuffix, bool newInstanceName = false);
 
 
         /// <summary>
@@ -110,11 +112,14 @@ namespace PerfIt.Handlers
         protected string GetInstanceName(bool newName = false)
         {
             return
-                _instanceName +
+                _instanceName + 
                 (newName ? "_" + Guid.NewGuid().ToString("N").Substring(6) : string.Empty);
         }
 
-      
 
+
+
+
+      
     }
 }

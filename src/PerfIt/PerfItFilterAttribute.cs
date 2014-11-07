@@ -35,6 +35,10 @@ namespace PerfIt
         /// </summary>
         public string[] Counters { get; set; }
 
+        /// <summary>
+        /// String tokens to be replaced during the actual invocation of the method decorated with the attribute
+        /// </summary>
+        public string[] InstanceNameSuffixItems { get; set; }
        
         public override void OnActionExecuting(HttpActionContext actionContext)
         {
@@ -54,7 +58,7 @@ namespace PerfIt
                     
                     HttpActionDescriptor actionDescriptor = actionContext.ActionDescriptor;
                     instanceName = PerfItRuntime.GetCounterInstanceName(actionDescriptor.ControllerDescriptor.ControllerType,
-                        actionDescriptor.ActionName);
+                        actionDescriptor.ActionName) ;
                 }
 
                 actionContext.Request.Properties.Add(Constants.PerfItKey, new PerfItContext());
@@ -71,6 +75,8 @@ namespace PerfIt
                         PerfItRuntime.MonitoredCountersContexts[PerfItRuntime.GetUniqueName(instanceName, counter)].Handler.OnRequestStarting(invocationContext);
                        
                     }
+
+                    invocationContext.InstanceNameSuffix = PerfItRuntime.GetCounterInstanceNameSuffix(this.InstanceNameSuffixItems,actionContext.ActionArguments);
 
                     invocationContext.Filter = this;
                 }

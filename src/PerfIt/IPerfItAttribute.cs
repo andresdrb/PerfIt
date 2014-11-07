@@ -30,6 +30,10 @@ namespace PerfIt
         /// </summary>
         string[] Counters { get; set; }
 
+        /// <summary>
+        /// String tokens to be replaced during the actual invocation of the method decorated with the attribute
+        /// </summary>
+        string[] InstanceNameSuffixItems { get; set; }
       
     }
 }

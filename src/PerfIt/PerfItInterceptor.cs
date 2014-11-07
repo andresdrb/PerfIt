@@ -39,13 +39,13 @@ namespace PerfIt
 
         public void Intercept(IInvocation invocation)
         {
-
+            
             var filter = PerfItRuntime.FindPerfItAttribute(invocation.MethodInvocationTarget);
             if (!PerfItRuntime.PublishCounters || filter==null)
             {
 
                 invocation.Proceed();
-
+                
             }
             else
             {
@@ -53,6 +53,9 @@ namespace PerfIt
                 {
                    
                     var invocationContext = new PerfItContext();
+                    invocationContext.InstanceNameSuffix = PerfItRuntime.GetCounterInstanceNameSuffix(filter.InstanceNameSuffixItems, invocation.MethodInvocationTarget.GetParameters().ToDictionary(param => param.Name, param => invocation.Arguments.GetValue(param.Position)));
+
+
                     if (filter != null)
                     {
                         foreach (var counterType in filter.Counters)
@@ -78,7 +81,7 @@ namespace PerfIt
 
 
                     invocation.Proceed();
-
+                    
                     foreach (var counter in filter.Counters)
                     {
                         PerfItRuntime.MonitoredCountersContexts[PerfItRuntime.GetUniqueName(filter.InstanceName, counter)].Handler.OnRequestEnding(invocationContext);

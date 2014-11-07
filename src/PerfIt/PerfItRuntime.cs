@@ -175,6 +175,11 @@ namespace PerfIt
                 PerformanceCounterCategory.Delete(categoryName);           
         }
 
+        internal static string GetCounterInstanceNameWithSuffix(string instanceName, string suffix)
+        {
+            return string.Format("{0}.{1}", instanceName, suffix);
+        }
+
         internal static string GetUniqueName(string instanceName, string counterType)
         {
             return string.Format("{0}.{1}", instanceName, counterType);
@@ -183,6 +188,31 @@ namespace PerfIt
         internal static string GetCounterInstanceName(Type controllerType, string actionName)
         {
             return string.Format("{0}_{1}", controllerType.FullName, actionName);
+        }
+
+        internal static string GetCounterInstanceNameSuffix(string[] suffixTokens, Dictionary<string, object> suffixValues)
+        {
+            List<string> suffixElements =new List<string>();
+
+            string suffix="";
+            if (suffixTokens!= null && suffixTokens.Length>0)
+            { 
+                foreach (var token in suffixTokens)
+	            { 
+                    object value=null;
+		            if(suffixValues.TryGetValue(token,out value))
+                    { 
+                        suffixElements.Add(string.Format("{0}({1})",token, value.ToString()));
+                    }
+                }
+          
+                if (suffixElements.Count>0)
+                {
+                    suffix = string.Join("_", suffixElements.ToArray());
+
+                }
+            }
+            return suffix;
         }
 
        

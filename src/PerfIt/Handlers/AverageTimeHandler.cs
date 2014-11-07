@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Linq;
@@ -11,8 +12,9 @@ namespace PerfIt.Handlers
     {
 
         private const string AverageTimeTakenTicksKey = "AverageTimeHandler_#_StopWatch_#_";
-        private  Lazy<PerformanceCounter> _counter;
-        private Lazy<PerformanceCounter> _baseCounter;
+        
+        protected ConcurrentDictionary<string, Lazy<PerformanceCounter>> _counters;
+        protected ConcurrentDictionary<string, Lazy<PerformanceCounter>> _baseCounters;
         
 
         public AverageTimeHandler(
@@ -20,7 +22,8 @@ namespace PerfIt.Handlers
             string instanceName)
             : base(categoryName,instanceName)
         {
-            BuildCounters();
+            _counters = new ConcurrentDictionary<string, Lazy<PerformanceCounter>>();
+            _baseCounters = new ConcurrentDictionary<string, Lazy<PerformanceCounter>>();
         }
 
         public override string CounterType
@@ -35,44 +38,61 @@ namespace PerfIt.Handlers
 
         protected override void DoOnRequestEnding(IPerfItContext context)
         {
+
+            //ensure instance counters exist
+            BuildCounters(context.InstanceNameSuffix);
+            var currentInstanceName = PerfItRuntime.GetCounterInstanceNameWithSuffix(GetInstanceName(), context.InstanceNameSuffix);
+
             var sw = (Stopwatch)context.Data[AverageTimeTakenTicksKey + _instanceName];
             sw.Stop();
-            _counter.Value.IncrementBy(sw.ElapsedTicks);
-            _baseCounter.Value.Increment();
+            _counters[currentInstanceName].Value.IncrementBy(sw.ElapsedTicks);
+            _baseCounters[currentInstanceName].Value.Increment();
         }
 
-        protected override void BuildCounters(bool newInstanceName = false)
+        protected override void BuildCounters(string instanceNameSuffix, bool newInstanceName = false)
         {
-            _counter = new Lazy<PerformanceCounter>(() =>
+            var currentInstanceName=PerfItRuntime.GetCounterInstanceNameWithSuffix(GetInstanceName(newInstanceName) , instanceNameSuffix);
+            if (!_counters.Keys.Contains(currentInstanceName))
             {
-                var counter = new PerformanceCounter()
+                var _counter = new Lazy<PerformanceCounter>(() =>
                 {
-                    CategoryName = _categoryName,
-                    CounterName = Name,
-                    InstanceName = GetInstanceName(newInstanceName),
-                    ReadOnly = false,
-                    InstanceLifetime = PerformanceCounterInstanceLifetime.Process
-                };
-                counter.RawValue = 0;
-                return counter;
+                    var counter = new PerformanceCounter()
+                    {
+                        CategoryName = _categoryName,
+                        CounterName = Name,
+                        InstanceName = currentInstanceName,
+                        ReadOnly = false,
+                        InstanceLifetime = PerformanceCounterInstanceLifetime.Process
+                    };
+                    counter.RawValue = 0;
+                    return counter;
+                }
+          );
+                _counters.AddOrUpdate(currentInstanceName,
+                                       _counter,
+                                       (key, existingCounter) => existingCounter);
             }
-      );
 
-
-            _baseCounter = new Lazy<PerformanceCounter>(() =>
+            if (!_baseCounters.Keys.Contains(currentInstanceName))
             {
-                var counter = new PerformanceCounter()
+               var  _baseCounter = new Lazy<PerformanceCounter>(() =>
                 {
-                    CategoryName = _categoryName,
-                    CounterName = GetBaseCounterName(),
-                    InstanceName = GetInstanceName(newInstanceName),
-                    ReadOnly = false,
-                    InstanceLifetime = PerformanceCounterInstanceLifetime.Process
-                };
-                counter.RawValue = 0;
-                return counter;
+                    var counter = new PerformanceCounter()
+                    {
+                        CategoryName = _categoryName,
+                        CounterName = GetBaseCounterName(),
+                        InstanceName = currentInstanceName,
+                        ReadOnly = false,
+                        InstanceLifetime = PerformanceCounterInstanceLifetime.Process
+                    };
+                    counter.RawValue = 0;
+                    return counter;
+                }
+                    );
+               _baseCounters.AddOrUpdate(currentInstanceName,
+                                          _baseCounter,
+                                          (key, existingCounter) => existingCounter);
             }
-                );
         }
 
         protected override CounterCreationData[] DoGetCreationData()
@@ -101,17 +121,27 @@ namespace PerfIt.Handlers
         public override void Dispose()
         {
             base.Dispose();
-            if (_counter!=null && _counter.IsValueCreated)
-            {
-                _counter.Value.RemoveInstance();
-                _counter.Value.Dispose();                
-            }
-            if (_baseCounter!=null && _baseCounter.IsValueCreated)
-            {
-                _baseCounter.Value.RemoveInstance();
-                _baseCounter.Value.Dispose();                
-            }
 
+            
+            foreach (var counter in _counters.Values)
+            {
+                if (counter != null && counter.IsValueCreated)
+                {
+                    counter.Value.RemoveInstance();
+                    counter.Value.Dispose();
+                }
+            }
+            foreach (var counter in _baseCounters.Values)
+            {
+                if (counter != null && counter.IsValueCreated)
+                {
+                    counter.Value.RemoveInstance();
+                    counter.Value.Dispose();
+                }
+            }
+        
+            
+          
         }
     }
 }

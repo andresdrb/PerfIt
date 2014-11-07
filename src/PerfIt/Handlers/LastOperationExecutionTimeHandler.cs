@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Linq;
@@ -10,7 +11,7 @@ namespace PerfIt.Handlers
     public class LastOperationExecutionTimeHandler : CounterHandlerBase
     {
         private const string TimeTakenTicksKey = "LastOperationExecutionTimeHandler_#_StopWatch_#_";
-        protected Lazy<PerformanceCounter> _counter;
+        protected ConcurrentDictionary<string,Lazy<PerformanceCounter>> _counters;
         
 
         public LastOperationExecutionTimeHandler(
@@ -18,7 +19,7 @@ namespace PerfIt.Handlers
             string instanceName)
             : base(categoryName, instanceName)
         {
-            BuildCounters();
+            _counters = new ConcurrentDictionary<string, Lazy<PerformanceCounter>>();
         }
 
        
@@ -34,26 +35,41 @@ namespace PerfIt.Handlers
 
         protected override void DoOnRequestEnding(IPerfItContext context)
         {
+            //ensure instance counters exist
+            BuildCounters(context.InstanceNameSuffix);
+
+            var currentInstanceName = PerfItRuntime.GetCounterInstanceNameWithSuffix(GetInstanceName(), context.InstanceNameSuffix);
+
             var sw = (Stopwatch)context.Data[TimeTakenTicksKey + _instanceName];
             sw.Stop();
-            _counter.Value.RawValue = sw.ElapsedMilliseconds;
+            _counters[currentInstanceName].Value.RawValue = sw.ElapsedMilliseconds;
         }
 
-        protected override void BuildCounters(bool newInstanceName = false)
+        protected override void BuildCounters(string instanceNameSuffix,bool newInstanceName = false)
         {
-            _counter = new Lazy<PerformanceCounter>(() =>
+
+            var currentInstanceName = PerfItRuntime.GetCounterInstanceNameWithSuffix(GetInstanceName(), instanceNameSuffix);
+            if (!_counters.Keys.Contains(currentInstanceName))
             {
-                var counter = new PerformanceCounter()
+                var _counter = new Lazy<PerformanceCounter>(() =>
                 {
-                    CategoryName = _categoryName,
-                    CounterName = Name,
-                    InstanceName = GetInstanceName(newInstanceName),
-                    ReadOnly = false,
-                    InstanceLifetime = PerformanceCounterInstanceLifetime.Process
-                };
-                counter.RawValue = 0;
-                return counter;
-            });
+                    var counter = new PerformanceCounter()
+                    {
+                        CategoryName = _categoryName,
+                        CounterName = Name,
+                        InstanceName = currentInstanceName,
+                        ReadOnly = false,
+                        InstanceLifetime = PerformanceCounterInstanceLifetime.Process
+                    };
+                    counter.RawValue = 0;
+                    return counter;
+                });
+
+           
+                    _counters.AddOrUpdate(currentInstanceName, 
+                        _counter, 
+                        (key, existingCounter) => existingCounter);
+            }
         }
 
         protected override CounterCreationData[] DoGetCreationData()
@@ -67,6 +83,20 @@ namespace PerfIt.Handlers
             };
 
             return counterCreationDatas;
+        }
+
+        public override void Dispose()
+        {
+            base.Dispose();
+            foreach (var counter in _counters.Values)
+            {
+                if (counter != null && counter.IsValueCreated)
+                {
+                    counter.Value.RemoveInstance();
+                    counter.Value.Dispose();
+                }
+            }
+
         }
     }
 }

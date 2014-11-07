@@ -11,7 +11,7 @@ namespace PerfIt
     {
         string CounterType { get; }
         void OnRequestStarting(IPerfItContext context);
-        void OnRequestEnding(IPerfItContext context);
+        void OnRequestEnding(IPerfItContext context );
 
         string Name { get; }
 

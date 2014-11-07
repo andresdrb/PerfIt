@@ -17,6 +17,8 @@ namespace PerfIt
 
         public PerfItFilterAttribute Filter { get; set; }
         public Dictionary<string, object> Data { get; private set; }
-        public ConcurrentBag<string> CountersToRun { get; private set; } 
+        public ConcurrentBag<string> CountersToRun { get; private set; }
+
+        public string InstanceNameSuffix { get; set; }
     }
 }
